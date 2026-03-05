@@ -20,6 +20,25 @@ class _HomeState extends State<Home> {
   bool _isCreating = false;
   bool _showArchived = false;
   bool _recientesPrimero = true;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTickets();
+  }
+
+  Future<void> _loadTickets() async {
+    try {
+      await TicketsDatabase.init();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
 
   void _onTicketSelected(RepairTicket ticket) {
     setState(() {
@@ -37,13 +56,18 @@ class _HomeState extends State<Home> {
     });
   }
 
-  void _saveTicket(RepairTicket ticket) {
+  Future<void> _saveTicket(RepairTicket ticket) async {
+    if (_isCreating) {
+      await TicketsDatabase.addTicket(ticket);
+    } else if (_isEditing) {
+      await TicketsDatabase.updateTicket(ticket);
+    }
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      if (_isCreating) {
-        TicketsDatabase.addTicket(ticket);
-      } else if (_isEditing) {
-        TicketsDatabase.updateTicket(ticket);
-      }
       _selectedTicket = ticket;
       _isCreating = false;
       _isEditing = false;
@@ -73,20 +97,27 @@ class _HomeState extends State<Home> {
     });
   }
 
-  void _changeTicketStatus(RepairStatus newStatus) {
+  Future<void> _changeTicketStatus(RepairStatus newStatus) async {
     if (_selectedTicket != null) {
+      _selectedTicket!.status = newStatus;
+      await TicketsDatabase.updateTicket(_selectedTicket!);
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _selectedTicket!.status = newStatus;
-        TicketsDatabase.updateTicket(_selectedTicket!);
+        _selectedTicket = _selectedTicket;
       });
     }
   }
 
-  void _archiveOrUnarchiveTicket() {
+  Future<void> _archiveOrUnarchiveTicket() async {
     if (_selectedTicket != null) {
+      _selectedTicket!.isArchived = !_selectedTicket!.isArchived;
+      await TicketsDatabase.updateTicket(_selectedTicket!);
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _selectedTicket!.isArchived = !_selectedTicket!.isArchived;
-        TicketsDatabase.updateTicket(_selectedTicket!);
         _selectedTicket = null; // deselect after archiving/unarchiving
       });
     }
@@ -152,6 +183,14 @@ class _HomeState extends State<Home> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     final baseTickets = _showArchived
         ? TicketsDatabase.archivedTickets
         : TicketsDatabase.activeTickets;

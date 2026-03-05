@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -89,21 +90,15 @@ class TicketPdfService {
   static Future<String?> exportToPdfFile(RepairTicket ticket) async {
     final defaultPath = _defaultExportPath(ticket.id);
     final defaultFile = File(defaultPath);
-
-    final location = await getSaveLocation(
-      suggestedName: defaultFile.uri.pathSegments.last,
+    final savePath = await _resolveSavePath(
+      suggestedFileName: defaultFile.uri.pathSegments.last,
       initialDirectory: defaultFile.parent.path,
-      confirmButtonText: 'Guardar PDF',
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'PDF', extensions: ['pdf']),
-      ],
+      ticketId: ticket.id,
     );
-
-    if (location == null) {
+    if (savePath == null) {
       return null;
     }
 
-    final savePath = location.path;
     final bytes = await buildPdfBytes(ticket);
     final file = File(savePath);
     await file.parent.create(recursive: true);
@@ -199,5 +194,63 @@ class TicketPdfService {
     final fileName =
         'ticket_${ticketId}_${DateTime.now().millisecondsSinceEpoch}.pdf';
     return '${exportDir.path}${Platform.pathSeparator}$fileName';
+  }
+
+  static Future<String?> _resolveSavePath({
+    required String suggestedFileName,
+    required String initialDirectory,
+    required String ticketId,
+  }) async {
+    try {
+      final location = await getSaveLocation(
+        suggestedName: suggestedFileName,
+        initialDirectory: initialDirectory,
+        confirmButtonText: 'Guardar PDF',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'PDF', extensions: ['pdf']),
+        ],
+      );
+      if (location != null) {
+        return location.path;
+      }
+      return null;
+    } on MissingPluginException {
+      return _resolveSavePathWithDirectoryPicker(
+        suggestedFileName: suggestedFileName,
+        initialDirectory: initialDirectory,
+        ticketId: ticketId,
+      );
+    } on UnsupportedError {
+      return _resolveSavePathWithDirectoryPicker(
+        suggestedFileName: suggestedFileName,
+        initialDirectory: initialDirectory,
+        ticketId: ticketId,
+      );
+    } catch (_) {
+      return _resolveSavePathWithDirectoryPicker(
+        suggestedFileName: suggestedFileName,
+        initialDirectory: initialDirectory,
+        ticketId: ticketId,
+      );
+    }
+  }
+
+  static Future<String?> _resolveSavePathWithDirectoryPicker({
+    required String suggestedFileName,
+    required String initialDirectory,
+    required String ticketId,
+  }) async {
+    try {
+      final directory = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Selecciona dónde guardar el PDF',
+        initialDirectory: initialDirectory,
+      );
+      if (directory != null && directory.isNotEmpty) {
+        return '$directory${Platform.pathSeparator}$suggestedFileName';
+      }
+      return null;
+    } catch (_) {
+      return _defaultExportPath(ticketId);
+    }
   }
 }

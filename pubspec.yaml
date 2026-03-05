@@ -43,6 +43,10 @@ dependencies:
   pdf: ^3.11.3
   printing: ^5.14.2
   file_selector: ^1.0.3
+  sembast: ^3.8.5+1
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  window_manager: ^0.4.3
 
 dev_dependencies:
   flutter_test:
